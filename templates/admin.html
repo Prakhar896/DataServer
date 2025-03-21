@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin | Data Server</title>
+    <style>
+        .flashMessage {
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <h1>Admin</h1>
+    {% with messages = get_flashed_messages() %}  
+        {% if messages %}  
+            {% for message in messages %}  
+                <h3 class="flashMessage">{{ message }}</h3>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    <p><a href="{{ url_for('getDataStore', key=adminKey)}}">View Data</a>   <a href="{{ url_for('viewLogs', key=adminKey)}}">View Logs</a>   <a href="{{ url_for('reloadMetadata', key=adminKey) }}">Reload Metadata</a>   <a href="{{ url_for('toggleLock', key=adminKey) }}">Toggle Lock</a></p>
+    <br>
+    <br>
+    <h3>Pending Request Approval</h3>
+    {% if pending == {} %}
+        <p>No pending requests.</p>
+    {% endif %}
+    {% for id in pending %}
+        <p>ID: <strong>{{ id }}</strong>     <a href="{{ url_for('approveRequest', key=adminKey, fragmentID=id) }}">Approve</a>     <a href="{{ url_for('deleteFragment', key=adminKey, fragmentID=id) }}">Delete</a></p>
+        <ul>
+            <li>IP: {{ pending[id]["originalIP"] }}</li>
+            <li>Reason: {{ pending[id]["reason"] }}</li>
+            <li>Created: {{ pending[id]["created"] }}</li>
+        </ul>
+    {% endfor %}
+
+    <br>
+
+    <h3>Active Fragments</h3>
+    {% if approved == {} %}
+        <p>No active fragments.</p>
+    {% endif %}
+    {% for id in approved %}
+        <p>ID: <strong>{{ id }}</strong> <a href="{{ url_for('deleteFragment', key=adminKey, fragmentID=id) }}">Delete</a></p>
+        <ul>
+            <li>Original IP: {{ approved[id]["originalIP"] }}</li>
+            <li>Known IPs: {{ approved[id]["knownIPs"] }}</li>
+            <li>Reason: {{ approved[id]["reason"] }}</li>
+            <li>Created: {{ approved[id]["created"] }}</li>
+            <li>Last Update: {{ approved[id]["lastUpdate"] }}</li>
+        </ul>
+    {% endfor %}
+</body>
+</html>

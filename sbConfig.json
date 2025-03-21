@@ -1,0 +1,16 @@
+{
+    "scripts": {
+        "run": [
+            "pm2 start ./virt/bin/python --name DataServer -- main.py"
+        ],
+        "stop": [
+            "pm2 stop DataServer"
+        ],
+        "logs": [
+            "pm2 logs DataServer --lines 100"
+        ]
+    },
+    "customNginx": {
+        "serverBlock": "client_max_body_size 10M;"
+    }
+}

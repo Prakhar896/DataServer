@@ -1,0 +1,5 @@
+virt/
+.env
+datastore.json
+__pycache__/
+logs.txt
