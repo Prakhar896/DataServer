@@ -3,3 +3,5 @@ virt/
 datastore.json
 __pycache__/
 logs.txt
+test.__pycache__
+creds.json
