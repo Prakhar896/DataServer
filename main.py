@@ -240,6 +240,33 @@ def readFragment():
     # Logger.log("READFRAGMENT: Data read from fragment ID '{}'.".format(fragmentID))
     return data, 200
 
+@app.route("/api/deleteFragment", methods=["POST"])
+@checkAPIKey
+@jsonOnly
+@enforceSchema(
+    ("fragmentID", str),
+    ("secret", str)
+)
+def destroyFragment():
+    # Retrieve data
+    fragmentID: str = request.json["fragmentID"]
+    secret: str = request.json["secret"]
+    
+    # Data validation
+    if fragmentID not in DataStore.system:
+        return "ERROR: Invalid request.", 400
+    if not Encryption.verifySHA256(secret, DataStore.system[fragmentID]["secret"]):
+        return "ERROR: Access unauthorised.", 401
+    
+    # Delete data
+    DataStore.destroyFragment(fragmentID)
+    del DataStore.system[fragmentID]
+    DataStore.writeSystemMetadata()
+    
+    Logger.log("DELETEFRAGMENT: Fragment ID '{}' deleted.".format(fragmentID))
+    
+    return "SUCCESS: Fragment deleted.", 200
+
 if __name__ == "__main__":
     res = DataStore.setup(withSystemMetadata=True)
     if not res:
