@@ -1,6 +1,8 @@
 from flask import request
 import os, sys, base64, uuid, random, datetime
 from passlib.hash import sha256_crypt as sha
+from typing import Dict, List
+from simple_websocket import Server
 
 class Encryption:
     @staticmethod
@@ -49,12 +51,16 @@ class Universal:
     systemLock = False
     
     @staticmethod
-    def generateUniqueID(customLength=None):
+    def generateUniqueID(customLength=None, notIn=[]):
         if customLength == None:
             return uuid.uuid4().hex
         else:
+            id = None
             source = list("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-            return ''.join(random.choices(source, k=customLength))
+            while id is None or id in notIn:
+                id = ''.join(random.choices(source, k=customLength))
+            
+            return id
     
     @staticmethod
     def utcNow(localisedTo: float = None):
@@ -240,3 +246,133 @@ Commands:
                 break
     
         return
+
+class StreamCentre:
+    connections: Dict[str, Dict[str, str | Server]] = {}
+    
+    # Data structure:
+    # {"123": {"<connectionID>": {"ip": "127.0.0.1", "datetime": "2023....", "ws": <simple_websocket.Server>}}}
+    
+    @staticmethod
+    def addConnection(fragmentID: str, ip: str, ws: Server) -> str:
+        if fragmentID not in StreamCentre.connections:
+            StreamCentre.connections[fragmentID] = {}
+        
+        connectionID = Universal.generateUniqueID(10, notIn=StreamCentre.connections[fragmentID].keys())
+        StreamCentre.connections[fragmentID][connectionID] = {
+            "ip": ip,
+            "datetime": Universal.utcNowString(Universal.localeOffset),
+            "ws": ws
+        }
+        
+        Logger.log("STREAMCENTRE ADDCONN: IP '{}' connected to fragment ID '{}' stream with ID '{}'.".format(ip, fragmentID, connectionID))
+        return connectionID
+    
+    @staticmethod
+    def removeConnection(fragmentID: str, connectionID: str) -> bool:
+        if fragmentID in StreamCentre.connections and connectionID in StreamCentre.connections[fragmentID]:
+            del StreamCentre.connections[fragmentID][connectionID]
+            if StreamCentre.connections[fragmentID] == {}:
+                del StreamCentre.connections[fragmentID]
+            
+            Logger.log("STREAMCENTRE REMOVECONN: Connection ID '{}' removed from fragment ID '{}' stream.".format(connectionID, fragmentID))
+            return True
+        else:
+            Logger.log("STREAMCENTRE REMOVECONN ERROR: Fragment ID '{}' or connection with ID '{}' not found.".format(connectionID, fragmentID))
+            return False
+    
+    @staticmethod
+    def clearClosedConnections():
+        try:
+            for fragmentID in list(StreamCentre.connections):
+                for connectionID in list(StreamCentre.connections[fragmentID]):
+                    connection: Server = StreamCentre.connections[fragmentID][connectionID]["ws"]
+                    if not connection.connected:
+                        StreamCentre.removeConnection(fragmentID, connectionID)
+        except Exception as e:
+            Logger.log("STREAMCENTRE CLEARCLOSED: Failed to clear closed connections. Error: {}".format(e))
+    
+    @staticmethod
+    def close(fragmentID: str=None, connectionID: str=None):
+        StreamCentre.clearClosedConnections()
+        
+        try:
+            if fragmentID != None and connectionID != None:
+                # Delete a specific single connection (both identifiers provided directly)
+                if fragmentID in StreamCentre.connections:
+                    if connectionID in StreamCentre.connections[fragmentID]:
+                        connection: Server = StreamCentre.connections[fragmentID][connectionID]["ws"]
+                        connection.close(message="This connection was closed.")
+                        StreamCentre.removeConnection(fragmentID, connectionID)
+                        
+                        Logger.log("STREAMCENTRE CLOSE: Closed connection with ID '{}' for fragment ID '{}'.".format(connectionID, fragmentID))
+                        return True
+            elif fragmentID != None and connectionID == None:
+                # Delete an entire fragment stream (fragmentID provided only)
+                if fragmentID in list(StreamCentre.connections):
+                    for connID in StreamCentre.connections[fragmentID]:
+                        connection: Server = StreamCentre.connections[fragmentID][connID]["ws"]
+                        connection.close(message="This fragment stream was closed.")
+                    del StreamCentre.connections[fragmentID]
+                    
+                    Logger.log("STREAMCENTRE CLOSE: Closed stream for fragment ID '{}'.".format(fragmentID))
+                    return True
+            else:
+                # Delete a specific single connection (connectionID provided only)
+                for fragmentID in list(StreamCentre.connections):
+                    if connectionID in StreamCentre.connections[fragmentID]:
+                        connection: Server = StreamCentre.connections[fragmentID][connectionID]["ws"]
+                        connection.close(message="This connection was closed.")
+                        StreamCentre.removeConnection(fragmentID, connectionID)
+                        
+                        Logger.log("STREAMCENTRE CLOSE: Closed connection with ID '{}' for fragment ID '{}'.".format(connectionID, fragmentID))
+                        return True
+        except Exception as e:
+            Logger.log("STREAMCENTRE CLOSE ERROR: Failed to close connection(s). Error: {}".format(e))
+        
+        return False
+    
+    @staticmethod
+    def shutdown():
+        StreamCentre.clearClosedConnections()
+        
+        try:
+            for fragmentID in list(StreamCentre.connections):
+                for connectionID in list(StreamCentre.connections[fragmentID]):
+                    connection: Server = StreamCentre.connections[fragmentID][connectionID]["ws"]
+                    connection.close(message="Stream centre was shutdown.")
+                del StreamCentre.connections[fragmentID]
+            
+            Logger.log("STREAMCENTRE SHUTDOWN: Stream centre shutdown successfully.")
+        except Exception as e:
+            Logger.log("STREAMCENTRE SHUTDOWN ERROR: Failed to shutdown stream centre. Error: {}".format(e))
+    
+    @staticmethod
+    def getConnections(fragmentID: str) -> Dict[str, str | Server]:
+        if fragmentID in StreamCentre.connections:
+            return StreamCentre.connections[fragmentID]
+        else:
+            return []
+    
+    @staticmethod
+    def getConnection(connectionID: str) -> Dict[str, str | Server]:
+        for fragmentID in StreamCentre.connections:
+            if connectionID in StreamCentre.connections[fragmentID]:
+                return StreamCentre.connections[fragmentID][connectionID]
+    
+    @staticmethod
+    def push(fragmentID: str, data) -> bool:
+        StreamCentre.clearClosedConnections()
+        
+        try:
+            if fragmentID in StreamCentre.connections:
+                for connectionID in StreamCentre.connections[fragmentID]:
+                    connection: Server = StreamCentre.connections[fragmentID][connectionID]["ws"]
+                    connection.send(data)
+            else:
+                raise Exception("Fragment ID '{}' not found.".format(fragmentID))
+        except Exception as e:
+            Logger.log("STREAMCENTRE PUSH ERROR: Failed to push data to fragment ID '{}'. Error: {}".format(fragmentID, e))
+            return False
+
+        return True

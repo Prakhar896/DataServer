@@ -1,5 +1,6 @@
 from flask import Flask, request, url_for, redirect, render_template, flash
 from flask_cors import CORS
+from flask_sock import Sock
 from flask_limiter import Limiter
 from dotenv import load_dotenv
 load_dotenv()
@@ -9,6 +10,7 @@ from decorators import enforceSchema, jsonOnly, checkAPIKey, checkAdmin
 
 app = Flask(__name__)
 CORS(app)
+sock = Sock(app)
 limiter = Limiter(
     Universal.getIP,
     app=app,
@@ -239,6 +241,10 @@ def readFragment():
     
     # Logger.log("READFRAGMENT: Data read from fragment ID '{}'.".format(fragmentID))
     return data, 200
+
+# @sock.route("/api/streamFragment")
+# def streamFragment(ws):
+#     ws.send("")
 
 @app.route("/api/deleteFragment", methods=["POST"])
 @checkAPIKey
