@@ -4,6 +4,7 @@
 
 import os, requests, copy, websockets, json
 from websockets.sync.client import ClientConnection, connect
+from websockets import Data
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -52,7 +53,10 @@ class CloudFragment:
             # Check connection status
             return self.conn != None and self.conn.close_code == None
 
-        def send(self, data):
+        def send(self, data) -> bool | str:
+            if not self.status():
+                return "ERROR: Stream status unhealthy."
+            
             try:
                 self.conn.send(data, text=True)
             except Exception as e:
@@ -60,25 +64,36 @@ class CloudFragment:
             
             return True
         
-        def receive(self):
+        def receive(self, timeout: float=None) -> Data | str:
+            if not self.status():
+                return "ERROR: Stream status unhealthy."
+            
             try:
-                rc = self.conn.recv()
+                rc = self.conn.recv(timeout=timeout)
             except Exception as e:
                 return "ERROR: Receive failed. Error: {}".format(e)
             
             return rc
+
+        def disconnect(self):
+            if self.conn != None:
+                if self.conn.close_code == None:
+                    self.conn.close(reason="Client disconnected.")
+                self.conn = None
+            
+            return True
         
         def connect(self):
-            if self.conn != None:
-                self.conn = None
+            self.disconnect()
             
             try:
                 self.conn = connect(self.serverPath("/api/streamFragment"))
             except Exception as e:
                 return "ERROR: Failed to connect. Error: {}".format(e)
             
-            initialInstructions = self.receive()
+            initialInstructions = self.receive(5)
             if initialInstructions.startswith("ERROR"):
+                self.disconnect()
                 return "ERROR: Failed to receive initial instructions. Error: {}".format(initialInstructions)
             
             authPayload = {
@@ -88,20 +103,57 @@ class CloudFragment:
             }
             sendResult = self.send(json.dumps(authPayload))
             if sendResult != True:
+                self.disconnect()
                 return "ERROR: Failed to submit auth payload. Error: {}".format(sendResult)
             
-            authSuccess = self.receive()
+            authSuccess = self.receive(5)
             if authSuccess.startswith("ERROR"):
+                self.disconnect()
                 return "ERROR: Failed to obtain authorisation attempt result. Error: {}".format(authSuccess)
             authSuccess = CloudFragment.StreamMessage(authSuccess)
             
             if authSuccess.type == "error":
+                self.disconnect()
                 return "ERROR: Authorisation attempt failed. Message: {}".format(authSuccess.message)
             if authSuccess.type != "success":
+                self.disconnect()
                 return "ERROR: Unkown auth result. Received: {}".format(authSuccess)
             
             print("{} STREAM: Connected successfully.".format(self.fragmentID))
             return True
+
+        def write(self, data: dict) -> 'CloudFragment.StreamMessage' | str:
+            if not self.status():
+                return "ERROR: Stream status unhealthy."
+            
+            res = self.send(json.dumps({
+                "action": "write",
+                "data": data
+            }))
+            if res != True:
+                return "ERROR: Failed to submit write action. Error: {}".format(res)
+            
+            ack = self.receive(3)
+            if ack.startswith("ERROR"):
+                return "ERROR: Write action submitted, but error in acknowledgement reception: {}".format(ack)
+            ack = CloudFragment.StreamMessage(ack)
+            
+            return ack
+
+        def read(self) -> 'CloudFragment.StreamMessage' | str:
+            if not self.status():
+                return "ERROR: Stream status unhealthy."
+            
+            res = self.send(json.dumps({"action": "read"}))
+            if res != True:
+                return "ERROR: Failed to submit read action. Error: {}".format(res)
+            
+            read = self.receive(3)
+            if read.startswith("ERROR"):
+                return "ERROR: Read action submitted, error in receiving result: {}".format(read)
+            read = CloudFragment.StreamMessage(read)
+            
+            return read
     
     """
     ## Introduction
