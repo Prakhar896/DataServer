@@ -336,7 +336,7 @@ class StreamCentre:
                     if not connection.connected:
                         StreamCentre.removeConnection(fragmentID, connectionID)
         except Exception as e:
-            Logger.log("STREAMCENTRE CLEARCLOSED: Failed to clear closed connections. Error: {}".format(e))
+            Logger.log("STREAMCENTRE CLEARCLOSED ERROR: Failed to clear closed connections. Error: {}".format(e))
     
     @staticmethod
     def close(fragmentID: str=None, connectionID: str=None):
