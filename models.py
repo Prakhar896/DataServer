@@ -292,6 +292,14 @@ class StreamCentre:
         return os.environ.get("StreamCentreEnabled", "False") == 'True'
     
     @staticmethod
+    def maxConnections():
+        return int(os.environ.get("StreamCentreMaxConnections", 20))
+    
+    @staticmethod
+    def maxStreamConnections():
+        return int(os.environ.get("StreamCentreMaxStreamConnections", 5))
+    
+    @staticmethod
     def addConnection(fragmentID: str, ip: str, ws: Server) -> str:
         if fragmentID not in StreamCentre.connections:
             StreamCentre.connections[fragmentID] = {}

@@ -31,6 +31,7 @@
                 <li>IP: {{ sc["data"][fragID][connID]["ip"] }} Datetime: {{ sc["data"][fragID][connID]["datetime"] }} <a href="{{ url_for('closeConnection', key=adminKey, fragmentID=fragID, connectionID=connID) }}">Close</a></li>
             {% endfor %}
         </ul>
+        <br>
     {% endfor %}
     <br>
     <h3>Pending Request Approval</h3>
