@@ -533,13 +533,15 @@ class CloudFragment:
         while True:
             update = self.stream.receive(timeout=timeout)
             if update.startswith("ERROR"):
-                print("ERROR: LiveStream error: {}".format(update))
+                print("CF LIVESTREAM {} ERROR: {}".format(self.fragmentID, update))
                 break
             update = CloudFragment.StreamMessage(update)
             if update.type == "write" and update.data != None:
                 self.data = update.data
                 if handler != None:
                     handler(self.data)
+            else:
+                print("CF LIVESTREAM {}: Unusual update received: {}".format(self.fragmentID, update))
     
     def __str__(self):
         return "CloudFragment: fragmentID={}, secret={}, reason={}".format(self.fragmentID, self.secret, self.reason)
