@@ -242,9 +242,95 @@ def readFragment():
     # Logger.log("READFRAGMENT: Data read from fragment ID '{}'.".format(fragmentID))
     return data, 200
 
-# @sock.route("/api/streamFragment")
-# def streamFragment(ws):
-#     ws.send("")
+@sock.route("/api/streamFragment")
+def streamFragment(ws: Server):
+    # Authorisation with API key, fragment ID and secret
+    ws.send(MessageWriter.normal("Authorisation required. Please submit credentials. All payloads as JSON."))
+    auth = ws.receive(timeout=3)
+    if auth == None:
+        ws.send(MessageWriter.error("Authorisation timeout."))
+        ws.close(message="Authorisation timeout.")
+        return
+    
+    # Parse and verify the authorisation data
+    fragID = None
+    ip = Universal.getIP()
+    try:
+        auth = json.loads(auth)
+        reqParams = ["apiKey", "fragmentID", "secret"]
+        for param in reqParams:
+            if (param not in auth) or (not isinstance(auth[param], str)):
+                ws.send(MessageWriter.error("Invalid payload. Connection terminated."))
+                return
+        
+        if "APIKey" in os.environ and auth["apiKey"] != os.environ.get("APIKey", None):
+            ws.send(MessageWriter.error("Authorisation failed."))
+            return
+        
+        fragID = auth["fragmentID"]
+        secret = auth["secret"]
+        
+        if fragID not in DataStore.system:
+            ws.send(MessageWriter.error("Fragment not found. Connection terminated."))
+            return
+        if not Encryption.verifySHA256(secret, DataStore.system[fragID]["secret"]):
+            ws.send(MessageWriter.error("Authorisation failed."))
+            return
+    except Exception as e:
+        Logger.log("STREAMFRAGMENT ERROR: Failed to verify auth payload. Error: {}".format(e))
+        ws.send(MessageWriter.error("Invalid payload. Connection terminated."))
+        return
+    
+    ws.send(MessageWriter.successEvent("Connected to fragment ID '{}' stream successfully.".format(fragID)))
+    connID = StreamCentre.addConnection(fragID, ip, ws)
+    
+    lastUpdateReceived = Universal.utcNow()
+    
+    while True:
+        update = ws.receive()
+        if (Universal.utcNow() - lastUpdateReceived).total_seconds() < 0.5:
+            # Reject spam updates
+            continue
+        else:
+            lastUpdateReceived = Universal.utcNow()
+        
+        try:
+            update = json.loads(update)
+        except Exception as e:
+            ws.send(MessageWriter.error("Payload unparsable. Please try again."))
+            continue
+        
+        # Process update
+        if "action" in update:
+            # Execute actions
+            action = update["action"]
+            if action == "write" and "data" in update and isinstance(update["data"], dict):
+                # Write action
+                
+                # Write to DataStore
+                DataStore.writeFragment(fragID, update["data"])
+                
+                DataStore.system[fragID]["lastUpdate"] = Universal.utcNowString()
+                if ip not in DataStore.system[fragID]["knownIPs"]:
+                    DataStore.system[fragID]["knownIPs"].append(ip)
+                
+                DataStore.writeSystemMetadata()
+                
+                # Blast update to all connections
+                StreamCentre.push(fragID, MessageWriter.writeEvent(update["data"]))
+            elif action == "read":
+                # Read action
+                ws.send(MessageWriter.readEvent(DataStore.readFragment(fragID)))
+            elif action == "close":
+                # Close action
+                StreamCentre.close(fragID, connID)
+                return
+            else:
+                ws.send(MessageWriter.error("Invalid action."))
+                continue
+        else:
+            ws.send(MessageWriter.error("Unexpected payload. Please try again."))
+            continue
 
 @app.route("/api/deleteFragment", methods=["POST"])
 @checkAPIKey

@@ -1,5 +1,5 @@
 from flask import request
-import os, sys, base64, uuid, random, datetime
+import os, sys, base64, uuid, random, datetime, json
 from passlib.hash import sha256_crypt as sha
 from typing import Dict, List
 from simple_websocket import Server
@@ -246,6 +246,40 @@ Commands:
                 break
     
         return
+
+class MessageWriter:
+    @staticmethod
+    def normal(msg: str):
+        return json.dumps({
+            "message": msg
+        })
+    
+    @staticmethod
+    def error(err: str):
+        return json.dumps({
+            "error": err
+        })
+        
+    @staticmethod
+    def successEvent(msg: str):
+        return json.dumps({
+            "event": "success",
+            "message": msg
+        })
+    
+    @staticmethod
+    def writeEvent(data: dict):
+        return json.dumps({
+            "event": "write",
+            "data": data
+        })
+    
+    @staticmethod
+    def readEvent(data: dict):
+        return json.dumps({
+            "event": "read",
+            "data": data
+        })
 
 class StreamCentre:
     connections: Dict[str, Dict[str, str | Server]] = {}

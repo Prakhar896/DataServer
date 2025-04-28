@@ -9,7 +9,7 @@ else:
     with open("creds.json", "w") as f:
         json.dump(creds, f)
 
-fragment = CloudFragment(fragmentID=creds["fragmentID"], secret=creds["secret"])
+fragment = CloudFragment(fragmentID=creds["fragmentID"], secret=creds["secret"], url="http://localhost:8250")
 
 def saveCreds():
     with open("creds.json", "w") as f:
