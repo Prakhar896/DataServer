@@ -288,6 +288,10 @@ class StreamCentre:
     # {"123": {"<connectionID>": {"ip": "127.0.0.1", "datetime": "2023....", "ws": <simple_websocket.Server>}}}
     
     @staticmethod
+    def checkPermission():
+        return os.environ.get("StreamCentreEnabled", "False") == 'True'
+    
+    @staticmethod
     def addConnection(fragmentID: str, ip: str, ws: Server) -> str:
         if fragmentID not in StreamCentre.connections:
             StreamCentre.connections[fragmentID] = {}
@@ -295,7 +299,7 @@ class StreamCentre:
         connectionID = Universal.generateUniqueID(10, notIn=StreamCentre.connections[fragmentID].keys())
         StreamCentre.connections[fragmentID][connectionID] = {
             "ip": ip,
-            "datetime": Universal.utcNowString(Universal.localeOffset),
+            "datetime": Universal.utcNowString(),
             "ws": ws
         }
         
@@ -387,6 +391,14 @@ class StreamCentre:
             return StreamCentre.connections[fragmentID]
         else:
             return []
+    
+    @staticmethod
+    def getConnectionsCount() -> int:
+        count = 0
+        for fragmentID in StreamCentre.connections:
+            count += len(StreamCentre.connections[fragmentID])
+        
+        return count
     
     @staticmethod
     def getConnection(connectionID: str) -> Dict[str, str | Server]:

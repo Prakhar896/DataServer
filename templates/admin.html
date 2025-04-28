@@ -21,6 +21,17 @@
     {% endwith %}
     <p><a href="{{ url_for('getDataStore', key=adminKey)}}">View Data</a>   <a href="{{ url_for('viewLogs', key=adminKey)}}">View Logs</a>   <a href="{{ url_for('reloadMetadata', key=adminKey) }}">Reload Metadata</a>   <a href="{{ url_for('toggleLock', key=adminKey) }}">Toggle Lock</a></p>
     <br>
+    <h3>Stream Centre: {{ sc["enabled"] }}</h3>
+    <p><strong>Streams: {{ sc["streams"] }} Connections: {{ sc["conns"] }}</strong>  <a href="{{ url_for('shutdownStreamCentre', key=adminKey) }}">Shutdown</a></p>
+    {% for fragID in sc["data"] %}
+        <p>Fragment ID: {{ fragID }}  <a href="{{ url_for('closeFragmentStream', key=adminKey, fragmentID=fragID) }}">Close Stream</a></p>
+        <p>Connections</p>
+        <ul>
+            {% for connID in sc["data"][fragID] %}
+                <li>IP: {{ sc["data"][fragID][connID]["ip"] }} Datetime: {{ sc["data"][fragID][connID]["datetime"] }} <a href="{{ url_for('closeConnection', key=adminKey, fragmentID=fragID, connectionID=connID) }}">Close</a></li>
+            {% endfor %}
+        </ul>
+    {% endfor %}
     <br>
     <h3>Pending Request Approval</h3>
     {% if pending == {} %}

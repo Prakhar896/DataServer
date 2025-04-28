@@ -47,10 +47,24 @@ def admin():
         data[id]["created"] = Universal.fromUTC(data[id]["created"], localisedTo=Universal.localeOffset).strftime(Universal.readableDatetimeFormat)
         data[id]["lastUpdate"] = Universal.fromUTC(data[id]["lastUpdate"], localisedTo=Universal.localeOffset).strftime(Universal.readableDatetimeFormat) if data[id]["lastUpdate"] != None else None
     
+    scData = {}
+    for fragID in StreamCentre.connections:
+        scData[fragID] = {}
+        for cID in StreamCentre.connections[fragID]:
+            scData[fragID][cID] = {
+                "ip": StreamCentre.connections[fragID][cID]["ip"],
+                "datetime": Universal.fromUTC(StreamCentre.connections[fragID][cID]["datetime"], localisedTo=Universal.localeOffset).strftime(Universal.readableDatetimeFormat)   
+            }
+    sc = {
+        "data": scData,
+        "streams": len(StreamCentre.connections),
+        "conns": StreamCentre.getConnectionsCount(),
+    }
+    
     approved = {id: data[id] for id in data if data[id]["approved"]}
     pending = {id: data[id] for id in data if not data[id]["approved"]}
     
-    return render_template("admin.html", approved=approved, pending=pending, adminKey=request.args.get("key", None))
+    return render_template("admin.html", approved=approved, pending=pending, adminKey=request.args.get("key", None), sc=sc)
 
 @app.route("/admin/approveRequest", methods=["GET"])
 @checkAdmin
@@ -128,6 +142,45 @@ def viewLogs():
         return "<br>".join(logs), 200
     except Exception as e:
         return "ERROR: Failed to read logs. Error: {}".format(e), 500
+
+@app.route("/admin/streamCentre/shutdown", methods=["GET"])
+@checkAdmin
+def shutdownStreamCentre():
+    StreamCentre.shutdown()
+    
+    flash("Stream Centre shutdown.")
+    return redirect(url_for("admin", key=request.args.get("key", None)))
+
+@app.route("/admin/streamCentre/closeFragment", methods=["GET"])
+def closeFragmentStream():
+    fragmentID = request.args.get("fragmentID", None)
+    if fragmentID == None:
+        return "ERROR: Invalid request.", 400
+    
+    if fragmentID not in DataStore.system or fragmentID not in StreamCentre.connections:
+        return "ERROR: Invalid request.", 400
+    
+    StreamCentre.close(fragmentID)
+    
+    flash("Fragment '{}' stream closed.".format(fragmentID))
+    return redirect(url_for("admin", key=request.args.get("key", None)))
+
+@app.route("/admin/streamCentre/closeConnection", methods=["GET"])
+def closeConnection():
+    fragmentID = request.args.get("fragmentID", None)
+    connectionID = request.args.get("connectionID", None)
+    if fragmentID == None or connectionID == None:
+        return "ERROR: Invalid request.", 400
+
+    if fragmentID not in DataStore.system or fragmentID not in StreamCentre.connections:
+        return "ERROR: Invalid request.", 400
+    if connectionID not in StreamCentre.connections[fragmentID]:
+        return "ERROR: Invalid request.", 400
+    
+    StreamCentre.close(fragmentID, connectionID)
+    
+    flash("Connection '{}' closed.".format(connectionID))
+    return redirect(url_for("admin", key=request.args.get("key", None)))
 
 @app.route("/api/requestFragment", methods=["POST"])
 @checkAPIKey
@@ -244,6 +297,10 @@ def readFragment():
 
 @sock.route("/api/streamFragment")
 def streamFragment(ws: Server):
+    if not StreamCentre.checkPermission():
+        ws.close(message="Fragment Stream API unavailable.")
+        return
+    
     # Authorisation with API key, fragment ID and secret
     ws.send(MessageWriter.normal("Authorisation required. Please submit credentials. All payloads as JSON."))
     auth = ws.receive(timeout=3)
