@@ -10,6 +10,17 @@ load_dotenv()
 
 class CloudFragment:
     class StreamMessage:
+        """
+        A class to parse and represent a stream message from a JSON buffer.
+        Attributes:
+            type (str): The type of the message. Possible values are "error", 
+                "event", "message", or "unknown".
+            data (Any): The data payload of the message, if present. Defaults to None.
+            message (str): The message content, if present. Defaults to None.
+            buffer (str): The original JSON buffer string used to initialize the object.
+        Methods:
+            __str__(): Returns a string representation of the StreamMessage object.
+        """
         def __init__(self, buffer: str):
             data = json.loads(buffer)
             msgType = None
@@ -39,6 +50,58 @@ class CloudFragment:
             return "StreamMessage(type='{}', data='{}', message='{}')".format(self.type, self.data, self.message)
     
     class Stream:
+        """
+        A class to manage WebSocket-based communication with a server for streaming data.
+        The `Stream` class provides methods to establish a WebSocket connection to a server,
+        authenticate the connection, and perform read and write operations on a data stream.
+        It is designed to interact with a server that supports WebSocket communication for
+        streaming fragments of data.
+        Attributes:
+            fragmentID (str): The unique identifier for the data fragment being streamed.
+            secret (str): A secret key used for authentication with the server.
+            apiKey (str): An optional API key for authentication. Defaults to the value of the
+                          "APIKey" environment variable if not provided.
+            url (str): The WebSocket server URL. Defaults to "ws://localhost:8250".
+            conn (ClientConnection): The WebSocket connection object. Initialized as None.
+        Methods:
+            serverPath(path: str) -> str:
+                Constructs the full server path by appending the given path to the base URL.
+            status() -> bool:
+                Checks the health of the WebSocket connection.
+            send(data) -> bool | str:
+                Sends data to the server over the WebSocket connection. Returns True if successful,
+                or an error message if the operation fails.
+            receive(timeout: float = None) -> Data | str:
+                Receives data from the server over the WebSocket connection. Returns the received
+                data or an error message if the operation fails.
+            disconnect() -> bool:
+                Closes the WebSocket connection if it is open. Always returns True.
+            connect() -> bool | str:
+                Establishes a WebSocket connection to the server, performs authentication, and
+                validates the connection. Returns True if successful, or an error message if
+                the connection or authentication fails.
+            write(data: dict) -> 'CloudFragment.StreamMessage | str':
+                Sends a write action to the server with the provided data. Returns an acknowledgment
+                message from the server or an error message if the operation fails.
+            read() -> 'CloudFragment.StreamMessage | str':
+                Sends a read action to the server to retrieve data. Returns the retrieved data or
+                an error message if the operation fails.
+        Usage:
+            1. Create an instance of the `Stream` class by providing the required parameters.
+            2. Call the `connect()` method to establish and authenticate the WebSocket connection.
+            3. Use the `write()` and `read()` methods to interact with the data stream.
+            4. Call the `disconnect()` method to close the connection when done.
+        Example:
+        ```
+        stream = Stream(fragmentID="exampleID", secret="exampleSecret")
+        connection_status = stream.connect()
+        if connection_status == True:
+            write_response = stream.write({"key": "value"})
+            read_response = stream.read()
+            stream.disconnect()
+        ```
+        """
+        
         def __init__(self, fragmentID: str, secret: str, apiKey: str=os.environ.get("APIKey", None), url: str="ws://localhost:8250"):
             self.fragmentID: str = fragmentID
             self.secret: str = secret
@@ -89,6 +152,7 @@ class CloudFragment:
             try:
                 self.conn = connect(self.serverPath("/api/streamFragment"))
             except Exception as e:
+                self.disconnect()
                 return "ERROR: Failed to connect. Error: {}".format(e)
             
             initialInstructions = self.receive(5)
@@ -117,12 +181,12 @@ class CloudFragment:
                 return "ERROR: Authorisation attempt failed. Message: {}".format(authSuccess.message)
             if authSuccess.type != "success":
                 self.disconnect()
-                return "ERROR: Unkown auth result. Received: {}".format(authSuccess)
+                return "ERROR: Unknown auth result. Received: {}".format(authSuccess)
             
             print("{} STREAM: Connected successfully.".format(self.fragmentID))
             return True
 
-        def write(self, data: dict) -> 'CloudFragment.StreamMessage' | str:
+        def write(self, data: dict) -> 'CloudFragment.StreamMessage | str':
             if not self.status():
                 return "ERROR: Stream status unhealthy."
             
@@ -140,7 +204,7 @@ class CloudFragment:
             
             return ack
 
-        def read(self) -> 'CloudFragment.StreamMessage' | str:
+        def read(self) -> 'CloudFragment.StreamMessage | str':
             if not self.status():
                 return "ERROR: Stream status unhealthy."
             
@@ -404,7 +468,7 @@ class CloudFragment:
             
             return "ERROR: Exception: {} Message: {}".format(e, readableMessage)
     
-    def initStream(self, autoConnect: bool=True):
+    def initStream(self, autoConnect: bool=True) -> bool | str:
         if self.fragmentID == None or self.secret == None:
             return "ERROR: Fragment ID or secret not set."
 
@@ -416,6 +480,66 @@ class CloudFragment:
                 return "ERROR: Failed to auto-connect new stream. Error: {}".format(res)
         
         return True
+    
+    def readWS(self, updateData: bool=True, returnOutputCopy: bool=True) -> dict | str:
+        if self.stream == None:
+            return "ERROR: Stream not initialised."
+        if not self.stream.status():
+            return "ERROR: Stream status unhealthy."
+        
+        readResponse = self.stream.read()
+        if isinstance(readResponse, str):
+            return readResponse
+        if readResponse.type != "read":
+            return "ERROR: Received unexpected event type. Expected: 'read', received: '{}'".format(readResponse.event)
+        if readResponse.data == None:
+            return "ERROR: No data received."
+        
+        if updateData:
+            self.data = readResponse.data
+            
+            if returnOutputCopy:
+                return copy.deepcopy(self.data)
+            else:
+                return self.data
+        else:
+            return readResponse.data
+    
+    def writeWS(self, data: dict=None, updateData: bool=True) -> bool | str:
+        data = self.data if data == None else data
+        if self.stream == None:
+            return "ERROR: Stream not initialised."
+        if not self.stream.status():
+            return "ERROR: Stream status unhealthy."
+        
+        writeResponse = self.stream.write(data)
+        if isinstance(writeResponse, str):
+            return writeResponse
+        if writeResponse.type != "write":
+            return "ERROR: Received unexpected event type. Expected: 'write', received: '{}'".format(writeResponse.event)
+        if writeResponse.data == None:
+            return "ERROR: No data received."
+        if updateData:
+            self.data = writeResponse.data
+        
+        return True
+    
+    def liveStream(self, handler=None, timeout: float=300.0):
+        if self.stream == None:
+            return "ERROR: Stream not initialised."
+        if not self.stream.status():
+            return "ERROR: Stream status unhealthy."
+        
+        while True:
+            update = self.stream.receive(timeout=timeout)
+            if update.startswith("ERROR"):
+                print("ERROR: LiveStream error: {}".format(update))
+                break
+            update = CloudFragment.StreamMessage(update)
+            if update.type == "write" and update.data != None:
+                self.data = update.data
+                if handler != None:
+                    handler(self.data)
     
     def __str__(self):
         return "CloudFragment: fragmentID={}, secret={}, reason={}".format(self.fragmentID, self.secret, self.reason)
