@@ -357,7 +357,7 @@ def streamFragment(ws: Server):
         if (Universal.utcNow() - lastUpdateReceived).total_seconds() < 0.5:
             # Reject spam updates
             continue
-        elif update == None and (Universal.utcNow() - lastUpdateReceived).total_seconds() > 300:
+        elif update == None and (Universal.utcNow() - lastUpdateReceived).total_seconds() >= 300:
             ws.send(MessageWriter.error("Connection timeout. Too long since any updates."))
             StreamCentre.close(fragID, connID)
             return
