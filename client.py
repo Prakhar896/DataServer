@@ -11,7 +11,10 @@ load_dotenv()
 class CloudFragment:
     class StreamMessage:
         """
-        A class to parse and represent a stream message from a JSON buffer.
+        `StreamMessage` is a class that represents JSON messages from the WebSocket server. Messages from the server can be of different types, and may/may not include messages or data.
+        The server is expected to always send JSON parsable messages. This class parses the JSON data initialises it into a `StreamMessage` object.
+        The aim is to make it easier to understand the message type and data.
+        
         Attributes:
             type (str): The type of the message. Possible values are "error", 
                 "event", "message", or "unknown".
@@ -51,17 +54,16 @@ class CloudFragment:
     
     class Stream:
         """
-        A class to manage WebSocket-based communication with a server for streaming data.
-        The `Stream` class provides methods to establish a WebSocket connection to a server,
-        authenticate the connection, and perform read and write operations on a data stream.
-        It is designed to interact with a server that supports WebSocket communication for
-        streaming fragments of data.
+        `Stream` is a sub-component of `CloudFragment` that enables WebSocket and stateful streaming of data to and from a data fragment at the server.
+        The class, when initialised, connects to a WebSocket API endpoint at the given URL. `CloudFragment.initStream()` can be used to quickly create a WebSocket connection and `Stream` object at `CloudFragment.stream`.
+        All implementations are synchronous and are non-blocking, though blocking could be achieved.
+        
         Attributes:
             fragmentID (str): The unique identifier for the data fragment being streamed.
             secret (str): A secret key used for authentication with the server.
             apiKey (str): An optional API key for authentication. Defaults to the value of the
                           "APIKey" environment variable if not provided.
-            url (str): The WebSocket server URL. Defaults to "ws://localhost:8250".
+            url (str): The WebSocket server URL. Defaults to "ws://dataws.prakhar.app".
             conn (ClientConnection): The WebSocket connection object. Initialized as None.
         Methods:
             serverPath(path: str) -> str:
@@ -86,23 +88,31 @@ class CloudFragment:
             read() -> 'CloudFragment.StreamMessage | str':
                 Sends a read action to the server to retrieve data. Returns the retrieved data or
                 an error message if the operation fails.
-        Usage:
-            1. Create an instance of the `Stream` class by providing the required parameters.
-            2. Call the `connect()` method to establish and authenticate the WebSocket connection.
-            3. Use the `write()` and `read()` methods to interact with the data stream.
-            4. Call the `disconnect()` method to close the connection when done.
+    
         Example:
         ```
-        stream = Stream(fragmentID="exampleID", secret="exampleSecret")
-        connection_status = stream.connect()
-        if connection_status == True:
-            write_response = stream.write({"key": "value"})
-            read_response = stream.read()
-            stream.disconnect()
+        # initialisation
+        frag = CloudFragment(secret="a123456", reason="Testing")
+        frag.request()
+        input() # server admin approves request
+        
+        # setup a stream and send a write
+        frag.initStream()
+        frag.data = {"Hello": "World"}
+        res: CloudFragment.StreamMessage = frag.writeWS() # the write action is pushed out as an update, delivering the write instantanously to all connections streaming the fragment.
+        print(res)
+        
+        # stream the fragment yourself
+        def doSomething(givenData):
+            print("Implement your own function here which may or may not use 'data'.")
+        frag.liveStream(runner=a) # providing runner is optional. this function is blocking on a given thread.
+        
+        # frag.liveStream will continuously receive updates (with a default 5 minute timeout for a period of no updates) and update the frag.data attribute.
+        # if provided, the runner will be called with the data received from the server (CloudFragment.StreamMessage.data).
         ```
         """
         
-        def __init__(self, fragmentID: str, secret: str, apiKey: str=os.environ.get("APIKey", None), url: str="ws://localhost:8250"):
+        def __init__(self, fragmentID: str, secret: str, apiKey: str=os.environ.get("APIKey", None), url: str="ws://dataws.prakhar.app"):
             self.fragmentID: str = fragmentID
             self.secret: str = secret
             self.apiKey: str = apiKey
