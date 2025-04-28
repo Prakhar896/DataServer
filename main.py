@@ -101,6 +101,8 @@ def deleteFragment():
     del DataStore.system[fragmentID]
     DataStore.writeSystemMetadata()
     
+    StreamCentre.close(fragmentID)
+    
     Logger.log("DELETEFRAGMENT: Fragment ID '{}' deleted.".format(fragmentID))
     
     flash("Fragment '{}' deleted.".format(fragmentID))
@@ -418,6 +420,8 @@ def destroyFragment():
     DataStore.destroyFragment(fragmentID)
     del DataStore.system[fragmentID]
     DataStore.writeSystemMetadata()
+    
+    StreamCentre.close(fragmentID)
     
     Logger.log("DELETEFRAGMENT: Fragment ID '{}' deleted.".format(fragmentID))
     

@@ -516,7 +516,7 @@ class CloudFragment:
         if isinstance(writeResponse, str):
             return writeResponse
         if writeResponse.type != "write":
-            return "ERROR: Received unexpected event type. Expected: 'write', received: '{}'".format(writeResponse.event)
+            return "ERROR: Received unexpected event type. Expected: 'write', received: '{}'".format(writeResponse.type)
         if writeResponse.data == None:
             return "ERROR: No data received."
         if updateData:
