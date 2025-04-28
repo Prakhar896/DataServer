@@ -305,6 +305,7 @@ def streamFragment(ws: Server):
     ws.send(MessageWriter.normal("Authorisation required. Please submit credentials. All payloads as JSON."))
     auth = ws.receive(timeout=3)
     if auth == None:
+        print("Auth timeout")
         ws.send(MessageWriter.error("Authorisation timeout."))
         ws.close(message="Authorisation timeout.")
         return
@@ -338,11 +339,13 @@ def streamFragment(ws: Server):
         ws.send(MessageWriter.error("Invalid payload. Connection terminated."))
         return
     
+    # ws.send(MessageWriter.error("i just dont like you"))
+    
     ws.send(MessageWriter.successEvent("Connected to fragment ID '{}' stream successfully.".format(fragID)))
     connID = StreamCentre.addConnection(fragID, ip, ws)
     
     lastUpdateReceived = Universal.utcNow()
-    
+    print("Receiving updates")
     while True:
         update = ws.receive()
         if (Universal.utcNow() - lastUpdateReceived).total_seconds() < 0.5:

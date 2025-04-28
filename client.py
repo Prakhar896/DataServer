@@ -2,11 +2,107 @@
 ## Version: 1.0
 ## Copyright: © 2025 Prakhar Trivedi. All rights reserved.
 
-import os, requests, copy
+import os, requests, copy, websockets, json
+from websockets.sync.client import ClientConnection, connect
 from dotenv import load_dotenv
 load_dotenv()
 
 class CloudFragment:
+    class StreamMessage:
+        def __init__(self, buffer: str):
+            data = json.loads(buffer)
+            msgType = None
+            msg = None
+            
+            # Understand the message type
+            if "error" in data:
+                msgType = "error"
+                msg = data["error"]
+            elif "event" in data:
+                msgType = data["event"]
+            else:
+                msgType = "unknown"
+            
+            # See if a message is present
+            if "message" in data:
+                if msgType == "unknown":
+                    msgType = "message"
+                msg = data["message"]
+            
+            self.type: str = msgType
+            self.data = data["data"] if "data" in data else None
+            self.message = msg
+            self.buffer = buffer
+
+        def __str__(self):
+            return "StreamMessage(type='{}', data='{}', message='{}')".format(self.type, self.data, self.message)
+    
+    class Stream:
+        def __init__(self, fragmentID: str, secret: str, apiKey: str=os.environ.get("APIKey", None), url: str="ws://localhost:8250"):
+            self.fragmentID: str = fragmentID
+            self.secret: str = secret
+            self.apiKey: str = apiKey
+            self.url: str = url
+            self.conn: ClientConnection = None
+        
+        def serverPath(self, path: str):
+            return self.url + path
+        
+        def status(self):
+            # Check connection status
+            return self.conn != None and self.conn.close_code == None
+
+        def send(self, data):
+            try:
+                self.conn.send(data, text=True)
+            except Exception as e:
+                return "ERROR: Send failed. Error: {}".format(e)
+            
+            return True
+        
+        def receive(self):
+            try:
+                rc = self.conn.recv()
+            except Exception as e:
+                return "ERROR: Receive failed. Error: {}".format(e)
+            
+            return rc
+        
+        def connect(self):
+            if self.conn != None:
+                self.conn = None
+            
+            try:
+                self.conn = connect(self.serverPath("/api/streamFragment"))
+            except Exception as e:
+                return "ERROR: Failed to connect. Error: {}".format(e)
+            
+            initialInstructions = self.receive()
+            if initialInstructions.startswith("ERROR"):
+                return "ERROR: Failed to receive initial instructions. Error: {}".format(initialInstructions)
+            
+            authPayload = {
+                "apiKey": self.apiKey,
+                "fragmentID": self.fragmentID,
+                "secret": self.secret
+            }
+            sendResult = self.send(json.dumps(authPayload))
+            if sendResult != True:
+                return "ERROR: Failed to submit auth payload. Error: {}".format(sendResult)
+            
+            authSuccess = self.receive()
+            if authSuccess.startswith("ERROR"):
+                return "ERROR: Failed to obtain authorisation attempt result. Error: {}".format(authSuccess)
+            authSuccess = CloudFragment.StreamMessage(authSuccess)
+            
+            if authSuccess.type == "error":
+                return "ERROR: Authorisation attempt failed. Message: {}".format(authSuccess.message)
+            if authSuccess.type != "success":
+                return "ERROR: Unkown auth result. Received: {}".format(authSuccess)
+            
+            print("{} STREAM: Connected successfully.".format(self.fragmentID))
+            return True
+    
     """
     ## Introduction
     `CloudFragment` is a class that allows interaction with the DataServer API developed by Prakhar Trivedi.
@@ -90,12 +186,14 @@ class CloudFragment:
     © 2025 Prakhar Trivedi. All rights reserved.
     """
     
-    def __init__(self, apiKey: str=os.environ.get("APIKey", None), fragmentID: str=None, secret: str=None, reason: str=None, url: str="https://data.prakhar.app"):
+    def __init__(self, apiKey: str=os.environ.get("APIKey", None), fragmentID: str=None, secret: str=None, reason: str=None, url: str="https://data.prakhar.app", wsURL: str="ws://localhost:8250"):
         self.apiKey: str | None = apiKey
         self.fragmentID: str | None = fragmentID
         self.secret: str | None = secret
         self.reason: str | None = reason
         self.url: str = url
+        self.wsURL: str = wsURL
+        self.stream: CloudFragment.Stream | None = None
         self.data: dict | None = None
     
     def serverPath(self, path: str):
@@ -253,6 +351,19 @@ class CloudFragment:
                 pass
             
             return "ERROR: Exception: {} Message: {}".format(e, readableMessage)
+    
+    def initStream(self, autoConnect: bool=True):
+        if self.fragmentID == None or self.secret == None:
+            return "ERROR: Fragment ID or secret not set."
+
+        self.stream = CloudFragment.Stream(self.fragmentID, self.secret, self.apiKey, self.wsURL)
+        
+        if autoConnect:
+            res = self.stream.connect()
+            if res != True:
+                return "ERROR: Failed to auto-connect new stream. Error: {}".format(res)
+        
+        return True
     
     def __str__(self):
         return "CloudFragment: fragmentID={}, secret={}, reason={}".format(self.fragmentID, self.secret, self.reason)

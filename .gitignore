@@ -6,3 +6,4 @@ logs.txt
 test.__pycache__
 creds.json
 .DS_Store
+.vscode/
