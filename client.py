@@ -147,7 +147,7 @@ class CloudFragment:
             secret (str): A secret key used for authentication with the server.
             apiKey (str): An optional API key for authentication. Defaults to the value of the
                           "APIKey" environment variable if not provided.
-            url (str): The WebSocket server URL. Defaults to "ws://dataws.prakhar.app".
+            url (str): The WebSocket server URL. Defaults to "wss://data.prakhar.app".
             conn (ClientConnection): The WebSocket connection object. Initialized as None.
         Methods:
             serverPath(path: str) -> str:
@@ -204,7 +204,7 @@ class CloudFragment:
         ```
         """
         
-        def __init__(self, fragmentID: str, secret: str, apiKey: str=os.environ.get("APIKey", None), url: str="ws://dataws.prakhar.app"):
+        def __init__(self, fragmentID: str, secret: str, apiKey: str=os.environ.get("APIKey", None), url: str="wss://data.prakhar.app"):
             self.fragmentID: str = fragmentID
             self.secret: str = secret
             self.apiKey: str = apiKey
@@ -360,7 +360,7 @@ class CloudFragment:
             
             return read
     
-    def __init__(self, apiKey: str=os.environ.get("APIKey", None), fragmentID: str=None, secret: str=None, reason: str=None, url: str="https://data.prakhar.app", wsURL: str="ws://dataws.prakhar.app"):
+    def __init__(self, apiKey: str=os.environ.get("APIKey", None), fragmentID: str=None, secret: str=None, reason: str=None, url: str="https://data.prakhar.app", wsURL: str="wss://data.prakhar.app"):
         self.apiKey: str | None = apiKey
         self.fragmentID: str | None = fragmentID
         self.secret: str | None = secret
