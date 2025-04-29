@@ -23,7 +23,7 @@
 
 from client import CloudFragment
 
-frag1 = CloudFragment(fragmentID="d90507e925844e5ab1cba1537102a060", secret="a123456", url="http://localhost:8250")
+frag1 = CloudFragment(fragmentID="095f8d79897e4acb85eb5fcb06d07375", secret="lmao123", url="http://localhost:8250")
 print(frag1.initStream())
 
 while True:

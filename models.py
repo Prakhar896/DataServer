@@ -423,8 +423,6 @@ class StreamCentre:
                 for connectionID in StreamCentre.connections[fragmentID]:
                     connection: Server = StreamCentre.connections[fragmentID][connectionID]["ws"]
                     connection.send(data)
-            else:
-                raise Exception("Fragment ID '{}' not found.".format(fragmentID))
         except Exception as e:
             Logger.log("STREAMCENTRE PUSH ERROR: Failed to push data to fragment ID '{}'. Error: {}".format(fragmentID, e))
             return False

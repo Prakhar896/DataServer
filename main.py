@@ -266,6 +266,8 @@ def writeFragment():
     
     DataStore.writeSystemMetadata()
     
+    StreamCentre.push(fragmentID, MessageWriter.writeEvent(data))
+    
     # Logger.log("WRITEFRAGMENT: Data written to fragment ID '{}'.".format(fragmentID))
     return "SUCCESS: Write successful.", 200
 
