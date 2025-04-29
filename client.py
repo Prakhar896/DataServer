@@ -2,7 +2,7 @@
 ## Version: 1.1
 ## Copyright: © 2025 Prakhar Trivedi. All rights reserved.
 
-import os, requests, copy, websockets, json
+import os, requests, copy, json, datetime
 from websockets.sync.client import ClientConnection, connect
 from websockets import Data
 from dotenv import load_dotenv
@@ -222,6 +222,7 @@ class CloudFragment:
         
         def addHistory(self, item):
             if self.historyEnabled:
+                item = "{} {}".format(datetime.datetime.now(datetime.timezone.utc).isoformat(), item)
                 self.history.append(item)
         
         def showHistory(self):
