@@ -280,6 +280,13 @@ class MessageWriter:
             "event": "read",
             "data": data
         })
+    
+    @staticmethod
+    def pingEvent():
+        return json.dumps({
+            "event": "ping",
+            "message": "Ping!"
+        })
 
 class StreamCentre:
     connections: Dict[str, Dict[str, str | Server]] = {}

@@ -126,6 +126,8 @@ def reloadMetadata():
 @checkAdmin
 def toggleLock():
     Universal.systemLock = not Universal.systemLock
+    if Universal.systemLock:
+        StreamCentre.shutdown()
     
     flash("System lock toggled! New status: {}".format("LOCKED" if Universal.systemLock else "UNLOCKED"))
     return redirect(url_for("admin", key=request.args.get("key", None)))
@@ -355,15 +357,35 @@ def streamFragment(ws: Server):
     lastUpdateReceived = Universal.utcNow()
     
     while True:
-        update = ws.receive(timeout=300)
+        update = ws.receive(timeout=180)
         if (Universal.utcNow() - lastUpdateReceived).total_seconds() < 0.5:
             # Reject spam updates
             continue
-        elif update == None and (Universal.utcNow() - lastUpdateReceived).total_seconds() >= 300:
-            ws.send(MessageWriter.error("Connection timeout. Too long since any updates."))
-            StreamCentre.close(fragID, connID)
-            return
+        elif update == None and (Universal.utcNow() - lastUpdateReceived).total_seconds() >= 180:
+            # Enter into ping-pong state to check if client is still alive
+            ws.send(MessageWriter.pingEvent())
+            update = ws.receive(timeout=3)
+            toBeClosed = True
+            
+            # See if valid pong was received and disable toBeClosed
+            if update != None:
+                try:
+                    update = json.loads(update)
+                    if update["action"] == "pong":
+                        toBeClosed = False
+                except:
+                    pass
+            
+            if toBeClosed:
+                ws.send(MessageWriter.error("Connection timeout. Too long since any updates."))
+                StreamCentre.close(fragID, connID)
+                return
+            else:
+                # Resume normal state
+                lastUpdateReceived = Universal.utcNow()
+                continue
         else:
+            # New update received
             lastUpdateReceived = Universal.utcNow()
         
         try:
@@ -393,6 +415,9 @@ def streamFragment(ws: Server):
             elif action == "read":
                 # Read action
                 ws.send(MessageWriter.readEvent(DataStore.readFragment(fragID)))
+            elif action == "ping":
+                # Ping action
+                ws.send(MessageWriter.successEvent("Pong!"))
             elif action == "close":
                 # Close action
                 StreamCentre.close(fragID, connID)

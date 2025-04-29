@@ -154,6 +154,11 @@ class CloudFragment:
                 Constructs the full server path by appending the given path to the base URL.
             status() -> bool:
                 Checks the health of the WebSocket connection.
+            addHistory(item):
+                Adds a new item to the stream's history. Useful for debugging and investigation purposes.
+                Requires self.historyEnabled=True.
+            showHistory():
+                Prints out all history items.
             send(data) -> bool | str:
                 Sends data to the server over the WebSocket connection. Returns True if successful,
                 or an error message if the operation fails.
@@ -166,6 +171,9 @@ class CloudFragment:
                 Establishes a WebSocket connection to the server, performs authentication, and
                 validates the connection. Returns True if successful, or an error message if
                 the connection or authentication fails.
+            ping() -> bool | str:
+                Sends a ping action to the server and expects to receive a pong acknowledgement within 3 seconds.
+                Returns `True` is the procedure is successful. Error string if otherwise.
             write(data: dict) -> 'CloudFragment.StreamMessage | str':
                 Sends a write action to the server with the provided data. Returns an acknowledgment
                 message from the server or an error message if the operation fails.
@@ -202,6 +210,8 @@ class CloudFragment:
             self.apiKey: str = apiKey
             self.url: str = url
             self.conn: ClientConnection = None
+            self.historyEnabled: bool = True
+            self.history = []
         
         def serverPath(self, path: str):
             return self.url + path
@@ -209,6 +219,16 @@ class CloudFragment:
         def status(self):
             # Check connection status
             return self.conn != None and self.conn.close_code == None
+        
+        def addHistory(self, item):
+            if self.historyEnabled:
+                self.history.append(item)
+        
+        def showHistory(self):
+            print("{} Items".format(len(self.history)))
+            for item in self.history:
+                print(item)
+            print("End of History")
 
         def send(self, data) -> bool | str:
             if not self.status():
@@ -217,7 +237,10 @@ class CloudFragment:
             try:
                 self.conn.send(data, text=True)
             except Exception as e:
+                self.addHistory("SNDERR: {}".format(e))
                 return "ERROR: Send failed. Error: {}".format(e)
+            
+            self.addHistory("SND: {}".format(data))
             
             return True
         
@@ -228,7 +251,10 @@ class CloudFragment:
             try:
                 rc = self.conn.recv(timeout=timeout)
             except Exception as e:
+                self.addHistory("RECERR: {}".format(e))
                 return "ERROR: Receive failed. Error: {}".format(e)
+            
+            self.addHistory("REC: {}".format(rc))
             
             return rc
 
@@ -237,6 +263,7 @@ class CloudFragment:
                 if self.conn.close_code == None:
                     self.conn.close(reason="Client disconnected.")
                 self.conn = None
+                self.addHistory("DC: {}".format(self.fragmentID))
             
             return True
         
@@ -277,7 +304,27 @@ class CloudFragment:
                 self.disconnect()
                 return "ERROR: Unknown auth result. Received: {}".format(authSuccess)
             
+            self.addHistory("CONN: {}".format(self.fragmentID))
+            
             print("{} STREAM: Connected successfully.".format(self.fragmentID))
+            return True
+        
+        def ping(self) -> bool | str:
+            if not self.status():
+                return "ERROR: Stream status unhealthy."
+            
+            res = self.send(json.dumps({"action": "ping"}))
+            if res != True:
+                return "ERROR: Failed to submit ping action. Error: {}".format(res)
+            
+            ack = self.receive(3)
+            if ack.startswith("ERROR"):
+                return "ERROR: Ping submitted, but error in pong reception: {}".format(ack)
+            
+            ack = CloudFragment.StreamMessage(ack)
+            if ack.type != "success":
+                return "ERROR: Received unexpected message. Expected: 'success', received: '{}'".format(ack)
+            
             return True
 
         def write(self, data: dict) -> 'CloudFragment.StreamMessage | str':
@@ -547,7 +594,9 @@ class CloudFragment:
                 print("CF LIVESTREAM {} ERROR: {}".format(self.fragmentID, update))
                 break
             update = CloudFragment.StreamMessage(update)
-            if update.type == "write" and update.data != None:
+            if update.type == "ping":
+                self.stream.send(json.dumps({"action": "pong"}))
+            elif update.type == "write" and update.data != None:
                 self.data = update.data
                 if handler != None:
                     handler(self.data)
