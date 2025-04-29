@@ -60,6 +60,7 @@ print(fragment.delete()) ## Expected output: Success message or error message. R
 - Calling `read()`, `write()`, or `delete()` without setting the fragment ID and secret will raise an exception or return an error.
 - `write()` function accepts a specific payload as a parameter, which will be written to the fragment. If no payload is provided, the `data` attribute will be written.
 - The `url` parameter can be changed to point to a different DataServer instance.
+- See `CloudFragment.Stream` for more details on WebSocket-based data fragment streaming.
 
 ## Errors
 - The functions will try their best to return errors as strings.
