@@ -262,6 +262,7 @@ class CloudFragment:
         def disconnect(self):
             if self.conn != None:
                 if self.conn.close_code == None:
+                    self.send(json.dumps({"action": "close"}))
                     self.conn.close(reason="Client disconnected.")
                 self.conn = None
                 self.addHistory("DC: {}".format(self.fragmentID))
