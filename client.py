@@ -329,7 +329,7 @@ class CloudFragment:
             
             return True
 
-        def write(self, data: dict) -> 'CloudFragment.StreamMessage | str':
+        def write(self, data: dict, ignoreAck=False) -> 'CloudFragment.StreamMessage | str':
             if not self.status():
                 return "ERROR: Stream status unhealthy."
             
@@ -339,6 +339,9 @@ class CloudFragment:
             }))
             if res != True:
                 return "ERROR: Failed to submit write action. Error: {}".format(res)
+            
+            if ignoreAck:
+                return CloudFragment.StreamMessage(json.dumps({"event": "write", "data": data}))
             
             ack = self.receive(3)
             if ack.startswith("ERROR"):
@@ -565,14 +568,14 @@ class CloudFragment:
         else:
             return readResponse.data
     
-    def writeWS(self, data: dict=None, updateData: bool=True) -> bool | str:
+    def writeWS(self, data: dict=None, updateData: bool=True, ignoreAck: bool=False) -> bool | str:
         data = self.data if data == None else data
         if self.stream == None:
             return "ERROR: Stream not initialised."
         if not self.stream.status():
             return "ERROR: Stream status unhealthy."
         
-        writeResponse = self.stream.write(data)
+        writeResponse = self.stream.write(data, ignoreAck=ignoreAck)
         if isinstance(writeResponse, str):
             return writeResponse
         if writeResponse.type != "write":
